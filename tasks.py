@@ -4,10 +4,16 @@ import time
 from importlib import import_module
 import sys
 import os
+import platform
 
 sys.path.append('.')
-
 app = Celery('tasks', broker='redis://localhost:6379/0', result_backend='redis://')
+
+ping_result = app.control.ping()
+if 'worker' in sys.argv and len(ping_result) > 0 and f'celery@{platform.node()}' in ping_result[0]:
+    print(f'Another worker is running')
+    exit(1)
+    
 
 @app.task
 def add(x, y):
@@ -34,3 +40,22 @@ def run_new_code(file_name, task_id):
         del sys.modules[file_name]
     new_code = import_module(file_name)
     return new_code.main(task_id)
+
+
+@app.task
+def celery_is_alive():
+    print(app.control.inspect())
+    print(app.control.ping())
+    print(app.control.inspect().registered())
+    #print(inspect().registered())
+    return True
+
+
+@app.task
+def update_worker():
+    try:
+        os.system('git pull')
+    except:
+        print('git pull error')
+    os.system('celery --app tasks worker --concurrency 8 --pool threads --loglevel=INFO')
+    exit(0)
